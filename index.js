@@ -1,5 +1,6 @@
 import {ApolloServer, UserInputError, gql} from 'apollo-server';
 import {v1 as uuid} from 'uuid';
+import axios from 'axios';
 
 const persons = [
     {
@@ -29,6 +30,11 @@ const persons = [
 
 const typeDefinitions = gql`
 
+    enum YesNo {
+        YES
+        NO
+    }
+
     type Address {
         street: String!
         city: String!
@@ -46,7 +52,7 @@ const typeDefinitions = gql`
 
     type Query {
         personCount: Int!
-        allPersons: [Person]!
+        allPersons(phone: YesNo): [Person]!
         findPerson(name: String!): Person
     }
 
@@ -57,6 +63,10 @@ const typeDefinitions = gql`
             street: String!
             city: String!
         ): Person
+        editNumber(
+            name: String!
+            phone: String!
+        ): Person
     }
 
 `
@@ -64,9 +74,20 @@ const typeDefinitions = gql`
 const resolvers = {
     Query: {
         personCount: () => {
-            return persons.length;
+            return persons.length
         },
-        allPersons: () => persons,
+        allPersons: async (root, args) => {
+
+            const {data: personsFromRestApi} = await axios.get('http://localhost:3000/persons')
+            console.log(personsFromRestApi)
+
+            if(!args.phone) return persons
+
+            const byPhone = person =>
+                args.phone === "YES" ? person.phone : !person.phone
+            
+            return persons.filter(byPhone)
+        },
         findPerson: (root, args) => {
             const {name} = args
             return persons.find(person => person.name === name)
@@ -84,6 +105,18 @@ const resolvers = {
             const person = {...args, id: uuid()}
             persons.push(person)
             return person
+        },
+        editNumber: (root, args) => {
+            const personIndex = persons.findIndex(p => p.name === args.name)
+            if(personIndex === -1) return null
+
+            const person = persons[personIndex]
+
+            const updatedPerson = {...person, phone: args.phone}
+            persons[personIndex] = updatedPerson
+
+            return updatedPerson
+
         }
     },
     Person: {
